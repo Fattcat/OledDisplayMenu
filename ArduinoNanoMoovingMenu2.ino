@@ -2,76 +2,115 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-// Definícia šírky a výšky OLED displeja
 #define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64  // Zmena na 64px výšku
-
-// Nastavenie SSD1306 napájania
+#define SCREEN_HEIGHT 64
 #define OLED_RESET    -1
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-// Text, ktorý chceme scrollovať
-String scrollText = "DonkToolV1";
-int textX; // Pozícia textu na osi X
-int direction = 1; // 1 znamená pohyb doprava, -1 znamená pohyb doľava
+#define BUTTON_UP    2
+#define BUTTON_DOWN  3
+#define BUTTON_ENTER 4
 
-// Statické texty, ktoré nebudú scrollovať
-String staticText1 = "______________________";
-String staticText2 = "Menu";
-String staticText3 = "Diodes :";
-String staticText4 = "Switch :";
+char scrollText[] = "DonkToolV1"; // Posúvaný text
+int textX = 0;             // X pozícia textu
+int direction = 1;         // 1 = doprava, -1 = doľava
+
+char staticText1[] = "_____________________"; // Statický text
+
+int cursorPosition = 0; // Aktuálna poloha kurzora
+char menuItems[][10] = {"First", "Second", "Third", "Forth"};
+int totalItems = sizeof(menuItems) / sizeof(menuItems[0]);
 
 void setup() {
-  // Inicializácia displeja
-  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { 
-    Serial.println(F("OLED displej sa nepodarilo inicializovať"));
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println(F("SSD1306 allocation failed"));
     for (;;);
   }
-
-  // Vyčistenie displeja
   display.clearDisplay();
-  display.setTextSize(1);  // Nastavenie veľkosti textu
-  display.setTextColor(SSD1306_WHITE); // Nastavenie farby textu
-  
-  // Nastavenie počiatočnej pozície textu na stred prvého riadku
-  textX = SCREEN_WIDTH / 2 - (scrollText.length() * 6) / 2; // Stred displeja
+  display.setTextColor(SSD1306_WHITE);
+  display.setTextSize(1);
+
+  pinMode(BUTTON_UP, INPUT_PULLUP);
+  pinMode(BUTTON_DOWN, INPUT_PULLUP);
+  pinMode(BUTTON_ENTER, INPUT_PULLUP);
+
+  textX = SCREEN_WIDTH / 2 - (strlen(scrollText) * 6) / 2; // Nastavíme na stred
 }
 
 void loop() {
-  display.clearDisplay(); // Vyčistenie displeja
+  // Krok 1: Vymažeme len časť displeja
+  display.clearDisplay();
 
-  // Zobrazíme text na prvej línii (posúvaný text)
-  display.setCursor(textX, 0); 
-  display.print(scrollText); // Vypísanie posúvaného textu na displej
+  // Krok 2: Posúvame text
+  textX += direction;
+  if (textX <= 0 || textX >= SCREEN_WIDTH - strlen(scrollText) * 6) {
+    direction *= -1; // Zmena smeru
+  }
+  display.setCursor(textX, 0);
+  display.print(scrollText);
 
-  // Statický text na druhom riadku
-  display.setCursor(0, 4); // Pozícia druhého riadku
+  // Krok 3: Zobrazíme statický text
+  display.setCursor(0, 3);
   display.print(staticText1);
-  
-  display.setCursor(0, 16);
-  display.print(staticText2);
-  
-  display.setCursor(0, 26);
-  display.print(staticText3);
-  
-  display.setCursor(0, 36);
-  display.print(staticText4);
 
-  // Aktualizácia displeja
-  display.display(); 
+  // Krok 4: Zobrazíme menu
+  drawMenu();
 
-  // Posúvame text
-  textX += direction; // Posúvame pozíciu podľa smeru
-
-  // Ak text narazí na ľavú stranu (x = 0), začneme posúvať doprava
-  if (textX <= 0) {
-    direction = 1; // Posúvame doprava
+  // Krok 5: Spracujeme tlačidlá
+  if (digitalRead(BUTTON_UP) == LOW) {
+    delay(50);
+    cursorPosition--;
+    if (cursorPosition < 0) cursorPosition = totalItems - 1;
+    delay(200);
   }
 
-  // Ak text narazí na pravú stranu (x = 128), začneme posúvať doľava
-  if (textX >= SCREEN_WIDTH - scrollText.length() * 6) {
-    direction = -1; // Posúvame doľava
+  if (digitalRead(BUTTON_DOWN) == LOW) {
+    delay(50);
+    cursorPosition++;
+    if (cursorPosition >= totalItems) cursorPosition = 0;
+    delay(200);
   }
 
-  delay(50); // Nastavenie rýchlosti posunu
+  if (digitalRead(BUTTON_ENTER) == LOW) {
+    delay(50);
+    showItemClicked(menuItems[cursorPosition]);
+    delay(200);
+  }
+
+  // Krok 6: Aktualizácia displeja
+  display.display();
+}
+
+void drawMenu() {
+  // Kreslí menu od riadku 20 nižšie
+  display.setCursor(0, 12);
+  for (int i = 0; i < totalItems; i++) {
+    if (i == cursorPosition) {
+      display.print("-> ");
+    } else {
+      display.print("   ");
+    }
+    display.println(menuItems[i]);
+  }
+}
+
+void showItemClicked(const char* item) {
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.print("Clicked on: ");
+  display.println(item);
+
+  display.setCursor(25, 50);
+  display.setTextSize(2);
+  display.setTextColor(SSD1306_WHITE, SSD1306_BLACK);
+  display.println("[EXIT]");
+  display.setTextColor(SSD1306_WHITE);
+  display.setTextSize(1);
+
+  display.display();
+
+  while (digitalRead(BUTTON_ENTER) == HIGH) {
+    display.display();
+    delay(10);
+  }
 }
